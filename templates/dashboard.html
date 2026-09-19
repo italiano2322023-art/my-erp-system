@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}لوحة التحكم الرئيسية{% endblock %}
+
+{% block content %}
+<h2 class="mb-4 fw-bold text-dark"><i class="fa-solid fa-gauge me-2"></i>لوحة التحكم الرئيسية</h2>
+
+<div class="row g-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white shadow-sm border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title text-white-50">إجمالي الأصناف بالمخزن</h6>
+                    <h2 class="fw-bold m-0">{{ stats.total_products }}</h2>
+                </div>
+                <i class="fa-solid fa-boxes-stacked fa-2x opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white shadow-sm border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title text-white-50">عدد العملاء</h6>
+                    <h2 class="fw-bold m-0">{{ stats.total_customers }}</h2>
+                </div>
+                <i class="fa-solid fa-users fa-2x opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white shadow-sm border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title text-white-50">عدد الموردين</h6>
+                    <h2 class="fw-bold m-0">{{ stats.total_suppliers }}</h2>
+                </div>
+                <i class="fa-solid fa-truck-field fa-2x opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white shadow-sm border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title text-white-50">رصيد الخزينة والنقدية</h6>
+                    <h2 class="fw-bold m-0">{{ "%.2f"|format(stats.total_cash) }}</h2>
+                </div>
+                <i class="fa-solid fa-wallet fa-2x opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
