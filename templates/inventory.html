@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>إدارة المخزون والتصنيفات</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-light p-4">
+<div class="container">
+    <div class="d-flex justify-content-between mb-4">
+        <h4><i class="fa-solid fa-warehouse me-2"></i>إدارة المخزن والأصناف</h4>
+        <a href="/" class="btn btn-secondary btn-sm">الرئيسية</a>
+    </div>
+
+    <!-- إضافة تصنيف ومخزن -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <form method="POST" class="card p-3 shadow-sm">
+                <input type="hidden" name="action" value="add_category">
+                <h6>إضافة تصنيف جديد</h6>
+                <div class="input-group"><input type="text" name="name" class="form-control" placeholder="اسم التصنيف" required><button class="btn btn-primary">حفظ</button></div>
+            </form>
+        </div>
+        <div class="col-md-6">
+            <form method="POST" class="card p-3 shadow-sm">
+                <input type="hidden" name="action" value="add_warehouse">
+                <h6>إضافة مخزن جديد</h6>
+                <div class="input-group"><input type="text" name="name" class="form-control" placeholder="اسم المخزن" required><button class="btn btn-warning text-white">حفظ</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- إضافة صنف جديد -->
+    <div class="card p-3 shadow-sm mb-4">
+        <h6>إضافة صنف جديد للمخزن</h6>
+        <form method="POST" class="row g-3">
+            <input type="hidden" name="action" value="add_product">
+            <div class="col-md-3"><input type="text" name="name" class="form-control" placeholder="اسم الصنف" required></div>
+            <div class="col-md-2"><input type="text" name="sku" class="form-control" placeholder="كود الصنف (SKU)"></div>
+            <div class="col-md-2">
+                <select name="category_id" class="form-select">
+                    {% for c in categories %}<option value="{{c.id}}">{{c.name}}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="warehouse_id" class="form-select">
+                    {% for w in warehouses %}<option value="{{w.id}}">{{w.name}}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1"><input type="number" name="quantity" class="form-control" placeholder="الكمية"></div>
+            <div class="col-md-1"><input type="number" step="0.01" name="buy_price" class="form-control" placeholder="شراء"></div>
+            <div class="col-md-1"><input type="number" step="0.01" name="sell_price" class="form-control" placeholder="بيع"></div>
+            <div class="col-12"><button class="btn btn-success w-100">إضافة للمخزن</button></div>
+        </form>
+    </div>
+
+    <!-- جدول الأصناف -->
+    <div class="card p-3 shadow-sm">
+        <h6>جدول الأصناف الحالي</h6>
+        <table class="table table-bordered align-middle">
+            <thead class="table-dark">
+                <tr><th>#</th><th>الصنف</th><th>الكود</th><th>التصنيف</th><th>المخزن</th><th>الكمية</th><th>سعر الشراء</th><th>سعر البيع</th></tr>
+            </thead>
+            <tbody>
+                {% for p in products %}
+                <tr>
+                    <td>{{p.id}}</td><td>{{p.name}}</td><td>{{p.sku}}</td>
+                    <td>{{p.category_name}}</td><td>{{p.warehouse_name}}</td>
+                    <td><span class="badge bg-info">{{p.quantity}}</span></td>
+                    <td>{{p.buy_price}}</td><td>{{p.sell_price}}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
