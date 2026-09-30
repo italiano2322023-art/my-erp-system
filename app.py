@@ -32,33 +32,84 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# 1. إعدادات المستخدمين
-@app.route('/users_settings', methods=['GET', 'POST'])
-def users_settings():
-    if session.get('role') != 'admin': return "غير مسموح إلا للأدمن"
+# --------------------------------------------------
+# 1. إعدادات وتكريت الخزائن وأذون استلام وصرف النقدية
+# --------------------------------------------------
+@app.route('/treasuries', methods=['GET', 'POST'])
+def treasuries():
+    if 'username' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     if request.method == 'POST':
-        conn.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-                     (request.form['username'], request.form['password'], request.form['role']))
+        name = request.form['name']
+        balance = float(request.form.get('balance', 0))
+        conn.execute('INSERT INTO treasuries (name, balance) VALUES (?, ?)', (name, balance))
         conn.commit()
-    users = conn.execute('SELECT * FROM users').fetchall()
+    treasuries_list = conn.execute('SELECT * FROM treasuries').fetchall()
     conn.close()
-    return render_template('users_settings.html', users=users)
+    return render_template('treasuries.html', treasuries=treasuries_list)
 
-# 2. إدارة العملاء والموردين
+@app.route('/vouchers/<v_type>', methods=['GET', 'POST'])
+def vouchers(v_type):
+    if 'username' not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    if request.method == 'POST':
+        treasury_id = request.form['treasury_id']
+        entity_id = request.form['entity_id']
+        amount = float(request.form['amount'])
+        notes = request.form['notes']
+
+        # حفظ الإذن
+        conn.execute('INSERT INTO cash_vouchers (voucher_type, treasury_id, entity_id, amount, notes) VALUES (?, ?, ?, ?, ?)',
+                     (v_type, treasury_id, entity_id, amount, notes))
+        
+        # تحديث رصيد الخزينة
+        t_change = amount if v_type == 'receipt' else -amount
+        conn.execute('UPDATE treasuries SET balance = balance + ? WHERE id = ?', (t_change, treasury_id))
+
+        # التحديث المالي للعميل/المورد
+        debit = amount if v_type == 'payment' else 0
+        credit = amount if v_type == 'receipt' else 0
+        v_title = "إذن استلام نقدية" if v_type == 'receipt' else "إذن صرف نقدية"
+        conn.execute('INSERT INTO ledger (entity_id, doc_type, description, debit, credit) VALUES (?, ?, ?, ?, ?)',
+                     (entity_id, v_type, f"{v_title}: {notes}", debit, credit))
+
+        # إضافة قيد محاسبي
+        acc_entity = "عملاء" if v_type == 'receipt' else "موردين"
+        conn.execute('INSERT INTO journal_entries (description, account_name, debit, credit) VALUES (?, ?, ?, ?)',
+                     (f"{v_title} - {notes}", "الخزينة", amount if v_type == 'receipt' else 0, amount if v_type == 'payment' else 0))
+        conn.execute('INSERT INTO journal_entries (description, account_name, debit, credit) VALUES (?, ?, ?, ?)',
+                     (f"{v_title} - {notes}", acc_entity, amount if v_type == 'payment' else 0, amount if v_type == 'receipt' else 0))
+
+        conn.commit()
+
+    vouchers_list = conn.execute('''SELECT v.*, t.name as treasury_name, e.name as entity_name 
+                                    FROM cash_vouchers v 
+                                    JOIN treasuries t ON v.treasury_id = t.id 
+                                    JOIN entities e ON v.entity_id = e.id 
+                                    WHERE v.voucher_type = ? ORDER BY v.id DESC''', (v_type,)).fetchall()
+    treasuries_list = conn.execute('SELECT * FROM treasuries').fetchall()
+    entities_list = conn.execute('SELECT * FROM entities').fetchall()
+    conn.close()
+    return render_template('vouchers.html', v_type=v_type, vouchers=vouchers_list, treasuries=treasuries_list, entities=entities_list)
+
+# --------------------------------------------------
+# 2. إعدادات العملاء والموردين وتكريتهم
+# --------------------------------------------------
 @app.route('/entities/<entity_type>', methods=['GET', 'POST'])
 def entities(entity_type):
     if 'username' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     if request.method == 'POST':
-        conn.execute('INSERT INTO entities (name, type, phone, address) VALUES (?, ?, ?, ?)',
-                     (request.form['name'], entity_type, request.form['phone'], request.form['address']))
+        conn.execute('INSERT INTO entities (name, type, phone, address, tax_number) VALUES (?, ?, ?, ?, ?)',
+                     (request.form['name'], entity_type, request.form['phone'], request.form['address'], request.form['tax_number']))
         conn.commit()
     entities_list = conn.execute('SELECT * FROM entities WHERE type = ?', (entity_type,)).fetchall()
     conn.close()
     return render_template('entities.html', entities=entities_list, entity_type=entity_type)
 
-# 3. إدارة المخازن والتصنيفات والمنتجات
+# --------------------------------------------------
+# 3. إعدادات المخازن والأصناف والتكاليف
+# --------------------------------------------------
 @app.route('/inventory', methods=['GET', 'POST'])
 def inventory():
     if 'username' not in session: return redirect(url_for('login'))
@@ -85,106 +136,161 @@ def inventory():
     conn.close()
     return render_template('inventory.html', products=products, categories=categories, warehouses=warehouses)
 
-# 4. الفواتير والعمليات (مبيعات / مشتريات / مرتجعات)
-@app.route('/invoices/<inv_type>', methods=['GET', 'POST'])
-def invoices(inv_type):
+# قسم التكاليف الديناميكي
+@app.route('/costs', methods=['GET', 'POST'])
+def costs():
     if 'username' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    entity_target = 'customer' if 'sale' in inv_type else 'supplier'
+    if request.method == 'POST':
+        product_id = request.form['product_id']
+        raw_cost = float(request.form.get('raw_material_cost', 0))
+        labor_cost = float(request.form.get('labor_cost', 0))
+        overhead = float(request.form.get('overhead_cost', 0))
+        total = raw_cost + labor_cost + overhead
+
+        conn.execute('DELETE FROM product_costs WHERE product_id = ?', (product_id,))
+        conn.execute('INSERT INTO product_costs (product_id, raw_material_cost, labor_cost, overhead_cost, total_cost) VALUES (?, ?, ?, ?, ?)',
+                     (product_id, raw_cost, labor_cost, overhead, total))
+        # تحديث سعر الشراء/التكلفة للمنتج النهائى
+        conn.execute('UPDATE products SET buy_price = ? WHERE id = ?', (total, product_id))
+        conn.commit()
+
+    costs_list = conn.execute('''SELECT pc.*, p.name as product_name, p.sell_price 
+                                 FROM product_costs pc JOIN products p ON pc.product_id = p.id''').fetchall()
+    products_list = conn.execute('SELECT * FROM products').fetchall()
+    conn.close()
+    return render_template('costs.html', costs=costs_list, products=products_list)
+
+# --------------------------------------------------
+# 4. الفواتير والخصومات والضرائب والطباعة
+# --------------------------------------------------
+DOC_CONFIG = {
+    'sales': {'type': 'sale', 'title': 'فواتير المبيعات', 'entity': 'customer'},
+    'sales_returns': {'type': 'sale_return', 'title': 'مرتجعات المبيعات', 'entity': 'customer'},
+    'purchases': {'type': 'purchase', 'title': 'فواتير المشتريات', 'entity': 'supplier'},
+    'purchases_returns': {'type': 'purchase_return', 'title': 'مرتجعات المشتريات', 'entity': 'supplier'}
+}
+
+@app.route('/docs/<doc_key>', methods=['GET', 'POST'])
+def manage_docs(doc_key):
+    if 'username' not in session: return redirect(url_for('login'))
+    cfg = DOC_CONFIG[doc_key]
+    conn = get_db_connection()
 
     if request.method == 'POST':
         entity_id = request.form['entity_id']
         product_id = request.form['product_id']
+        treasury_id = request.form['treasury_id']
         qty = int(request.form['quantity'])
         price = float(request.form['unit_price'])
-        total = qty * price
+        discount = float(request.form.get('discount', 0))
+        tax_rate = float(request.form.get('tax_rate', 0))
         paid = float(request.form.get('paid_amount', 0))
 
-        # 1. إنشاء الفاتورة
+        subtotal = qty * price
+        after_discount = subtotal - discount
+        tax_amount = after_discount * (tax_rate / 100.0)
+        total_amount = after_discount + tax_amount
+
         cur = conn.cursor()
-        cur.execute('INSERT INTO invoices (invoice_type, entity_id, total_amount, paid_amount) VALUES (?, ?, ?, ?)',
-                    (inv_type, entity_id, total, paid))
+        cur.execute('''INSERT INTO invoices (doc_type, entity_id, subtotal, discount, tax_rate, tax_amount, total_amount, paid_amount, treasury_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (cfg['type'], entity_id, subtotal, discount, tax_rate, tax_amount, total_amount, paid, treasury_id))
         inv_id = cur.lastrowid
         cur.execute('INSERT INTO invoice_items (invoice_id, product_id, quantity, unit_price, total) VALUES (?, ?, ?, ?, ?)',
-                    (inv_id, product_id, qty, price, total))
+                    (inv_id, product_id, qty, price, subtotal))
 
-        # 2. تحديث حركة المخزن تلقائياً
-        qty_change = -qty if inv_type in ['sale', 'purchase_return'] else qty
-        cur.execute('UPDATE products SET quantity = quantity + ? WHERE id = ?', (qty_change, product_id))
+        # تحديث المخزن
+        stock_change = -qty if cfg['type'] in ['sale', 'purchase_return'] else qty
+        cur.execute('UPDATE products SET quantity = quantity + ? WHERE id = ?', (stock_change, product_id))
 
-        # 3. التأثير على كشف الحساب (Ledger)
-        debit = total if inv_type in ['sale', 'purchase_return'] else 0
-        credit = total if inv_type in ['purchase', 'sale_return'] else 0
-        cur.execute('INSERT INTO ledger (entity_id, description, debit, credit) VALUES (?, ?, ?, ?)',
-                    (entity_id, f"فاتورة {inv_type} رقم {inv_id}", debit, credit))
+        # تحديث الخزينة بالمبلغ المدفوع
         if paid > 0:
-            cur.execute('INSERT INTO ledger (entity_id, description, debit, credit) VALUES (?, ?, ?, ?)',
-                        (entity_id, f"سداد عن فاتورة رقم {inv_id}", credit if debit > 0 else 0, paid if debit > 0 else paid))
+            t_change = paid if cfg['type'] in ['sale', 'purchase_return'] else -paid
+            cur.execute('UPDATE treasuries SET balance = balance + ? WHERE id = ?', (t_change, treasury_id))
+
+        # التحديث المالي للعميل/المورد
+        debit = total_amount if cfg['type'] in ['sale', 'purchase_return'] else 0
+        credit = total_amount if cfg['type'] in ['purchase', 'sale_return'] else 0
+        cur.execute('INSERT INTO ledger (entity_id, doc_type, description, debit, credit) VALUES (?, ?, ?, ?, ?)',
+                    (entity_id, cfg['type'], f"فاتورة {cfg['title']} رقم #{inv_id}", debit, credit))
+
+        if paid > 0:
+            p_debit = paid if cfg['type'] in ['purchase', 'sale_return'] else 0
+            p_credit = paid if cfg['type'] in ['sale', 'purchase_return'] else 0
+            cur.execute('INSERT INTO ledger (entity_id, doc_type, description, debit, credit) VALUES (?, ?, ?, ?, ?)',
+                        (entity_id, 'payment', f"سداد عن فاتورة #{inv_id}", p_debit, p_credit))
 
         conn.commit()
 
-    invoices_list = conn.execute('''SELECT i.*, e.name as entity_name 
-                                    FROM invoices i JOIN entities e ON i.entity_id = e.id 
-                                    WHERE i.invoice_type = ? ORDER BY i.id DESC''', (inv_type,)).fetchall()
-    entities_list = conn.execute('SELECT * FROM entities WHERE type = ?', (entity_target,)).fetchall()
+    docs_list = conn.execute('''SELECT i.*, e.name as entity_name 
+                                FROM invoices i JOIN entities e ON i.entity_id = e.id 
+                                WHERE i.doc_type = ? ORDER BY i.id DESC''', (cfg['type'],)).fetchall()
+    entities_list = conn.execute('SELECT * FROM entities WHERE type = ?', (cfg['entity'],)).fetchall()
     products_list = conn.execute('SELECT * FROM products').fetchall()
+    treasuries_list = conn.execute('SELECT * FROM treasuries').fetchall()
     conn.close()
-    return render_template('invoices.html', invoices=invoices_list, entities=entities_list, products=products_list, inv_type=inv_type)
+    return render_template('doc_template.html', cfg=cfg, docs=docs_list, entities=entities_list, products=products_list, treasuries=treasuries_list, doc_key=doc_key)
 
-# 5. كشف الحسابات المالية (Ledger)
-@app.route('/accounts')
-def accounts():
+# طباعة الفاتورة
+@app.route('/print_invoice/<int:inv_id>')
+def print_invoice(inv_id):
+    if 'username' not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    invoice = conn.execute('''SELECT i.*, e.name as entity_name, e.phone, e.address, e.tax_number 
+                              FROM invoices i JOIN entities e ON i.entity_id = e.id WHERE i.id = ?''', (inv_id,)).fetchone()
+    items = conn.execute('''SELECT ii.*, p.name as product_name 
+                            FROM invoice_items ii JOIN products p ON ii.product_id = p.id WHERE ii.invoice_id = ?''', (inv_id,)).fetchall()
+    conn.close()
+    return render_template('print_invoice.html', invoice=invoice, items=items)
+
+# --------------------------------------------------
+# 5. كشوف الحسابات العامة (عملاء / موردين)
+# --------------------------------------------------
+@app.route('/statement/<entity_type>')
+def statement(entity_type):
     if 'username' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     entity_id = request.args.get('entity_id')
-    ledger_entries = []
-    selected_entity = None
-    balance = 0
+    ledger_entries, selected_entity, balance = [], None, 0
 
     if entity_id:
         selected_entity = conn.execute('SELECT * FROM entities WHERE id = ?', (entity_id,)).fetchone()
-        entries = conn.execute('SELECT * FROM ledger WHERE entity_id = ? ORDER BY date ASC', (entity_id,)).fetchall()
+        entries = conn.execute('SELECT * FROM ledger WHERE entity_id = ? ORDER BY id ASC', (entity_id,)).fetchall()
         for e in entries:
             balance += (e['debit'] - e['credit'])
             entry_dict = dict(e)
             entry_dict['running_balance'] = balance
             ledger_entries.append(entry_dict)
 
-    entities_list = conn.execute('SELECT * FROM entities').fetchall()
+    entities_list = conn.execute('SELECT * FROM entities WHERE type = ?', (entity_type,)).fetchall()
     conn.close()
-    return render_template('accounts.html', entities=entities_list, entries=ledger_entries, selected_entity=selected_entity)
+    return render_template('statement.html', entities=entities_list, entries=ledger_entries, selected_entity=selected_entity, entity_type=entity_type)
 
-# 6. الموارد البشرية (HR)
-@app.route('/hr', methods=['GET', 'POST'])
-def hr():
+# --------------------------------------------------
+# 6. القيود المحاسبية القوائم المالية والتقارير
+# --------------------------------------------------
+@app.route('/journal')
+def journal():
     if 'username' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    if request.method == 'POST':
-        conn.execute('INSERT INTO employees (name, position, salary, hire_date) VALUES (?, ?, ?, ?)',
-                     (request.form['name'], request.form['position'], request.form['salary'], request.form['hire_date']))
-        conn.commit()
-    employees = conn.execute('SELECT * FROM employees').fetchall()
+    entries = conn.execute('SELECT * FROM journal_entries ORDER BY id DESC').fetchall()
     conn.close()
-    return render_template('hr.html', employees=employees)
+    return render_template('journal.html', entries=entries)
 
-# الموديولات الأخرى العامة
-@app.route('/sales')
-def sales(): return redirect(url_for('invoices', inv_type='sale'))
-
-@app.route('/purchases')
-def purchases(): return redirect(url_for('invoices', inv_type='purchase'))
-
-@app.route('/production')
-def production(): return render_template('placeholder.html', title="التصنيع والإنتاج")
-
-@app.route('/maintenance')
-def maintenance(): return render_template('placeholder.html', title="إدارة الصيانة")
-
-@app.route('/reports')
-def reports(): return render_template('placeholder.html', title="التقارير والذكاء التجاري")
-
-@app.route('/crm')
-def crm(): return render_template('entities', entity_type='customer')
+@app.route('/financial_statements')
+def financial_statements():
+    if 'username' not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    
+    # حساب الإيرادات والمصروفات والأصول والخصوم
+    sales = conn.execute("SELECT SUM(total_amount) as total FROM invoices WHERE doc_type='sale'").fetchone()['total'] or 0
+    purchases = conn.execute("SELECT SUM(total_amount) as total FROM invoices WHERE doc_type='purchase'").fetchone()['total'] or 0
+    cash_balance = conn.execute("SELECT SUM(balance) as total FROM treasuries").fetchone()['total'] or 0
+    
+    net_profit = sales - purchases
+    conn.close()
+    return render_template('financial_statements.html', sales=sales, purchases=purchases, cash_balance=cash_balance, net_profit=net_profit)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8"><title>فاتورة #{{ invoice.id }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <style> @media print { .no-print { display: none; } } </style>
+</head>
+<body class="p-5">
+<div class="container border p-4">
+    <div class="d-flex justify-content-between border-bottom pb-3 mb-3">
+        <div>
+            <h2>فاتورة {{ invoice.doc_type }}</h2>
+            <p>رقم الفاتورة: #{{ invoice.id }}<br>التاريخ: {{ invoice.date }}</p>
+        </div>
+        <div class="text-end">
+            <h4>اسم الشركة / النظام</h4>
+            <p>الرقم الضريبي: 123456789</p>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <h6>بيانات العميل / المورد:</h6>
+        <p>الاسم: {{ invoice.entity_name }} | الهاتف: {{ invoice.phone }} | الرقم الضريبي: {{ invoice.tax_number }}</p>
+    </div>
+
+    <table class="table table-bordered mb-4">
+        <thead><tr><th>المنتج</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody>
+            {% for item in items %}
+            <tr><td>{{ item.product_name }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td><td>{{ item.total }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="row">
+        <div class="col-md-6 offset-md-6">
+            <table class="table table-sm">
+                <tr><th>المبلغ الإجمالي:</th><td>{{ invoice.subtotal }}</td></tr>
+                <tr><th>الخصم:</th><td>{{ invoice.discount }}</td></tr>
+                <tr><th>ضريبة القيمة المضافة ({{ invoice.tax_rate }}%):</th><td>{{ invoice.tax_amount }}</td></tr>
+                <tr class="table-active"><th>الصافي النهائي:</th><th>{{ invoice.total_amount }}</th></tr>
+                <tr><th>المدفوع:</th><td>{{ invoice.paid_amount }}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <button onclick="window.print()" class="btn btn-primary no-print w-100 mt-4">طباعة الفاتورة</button>
+</div>
+</body>
+</html>

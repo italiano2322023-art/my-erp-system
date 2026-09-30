@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}إدارة الموردين{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold"><i class="fa-solid fa-truck-field me-2"></i>إدارة الموردين</h3>
+    <button class="btn btn-warning text-white" data-bs-toggle="modal" data-bs-target="#addSupplierModal">
+        <i class="fa-solid fa-plus me-1"></i> إضافة مورد جديد
+    </button>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>اسم المورد</th>
+                    <th>رقم الهاتف</th>
+                    <th>العنوان</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in suppliers %}
+                <tr>
+                    <td>{{ s[0] }}</td>
+                    <td class="fw-bold">{{ s[1] }}</td>
+                    <td>{{ s[2] or '-' }}</td>
+                    <td>{{ s[3] or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center py-4 text-muted">لا يوجد موردين مضافين حالياً.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="addSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة مورد جديد</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">اسم المورد *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">رقم الهاتف</label>
+                        <input type="text" name="phone" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">العنوان</label>
+                        <input type="text" name="address" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-warning text-white">حفظ المورد</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

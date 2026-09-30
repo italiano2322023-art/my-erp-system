@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ cfg.title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-light p-4">
+<div class="container">
+    <!-- التبويبات العلوية للتنقل السريع -->
+    <div class="mb-4">
+        <a href="/docs/sales" class="btn btn-outline-success btn-sm me-1">فواتير المبيعات</a>
+        <a href="/docs/sales_returns" class="btn btn-outline-warning btn-sm me-1">مرتجعات المبيعات</a>
+        <a href="/docs/purchases" class="btn btn-outline-primary btn-sm me-1">فواتير المشتريات</a>
+        <a href="/docs/purchases_returns" class="btn btn-outline-danger btn-sm me-1">مرتجعات المشتريات</a>
+        <a href="/" class="btn btn-secondary btn-sm float-end">الرئيسية</a>
+    </div>
+
+    <div class="card p-3 shadow-sm mb-4 border-top border-4 border-primary">
+        <h4 class="mb-3"><i class="fa-solid fa-file-invoice me-2"></i>{{ cfg.title }}</h4>
+        <form method="POST" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">الجهة ({{ cfg.entity }})</label>
+                <select name="entity_id" class="form-select" required>
+                    {% for e in entities %}<option value="{{e.id}}">{{e.name}}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">الصنف / المنتج</label>
+                <select name="product_id" class="form-select" required>
+                    {% for p in products %}<option value="{{p.id}}">{{p.name}} (الرصيد: {{p.quantity}})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2"><label class="form-label">الكمية</label><input type="number" name="quantity" class="form-control" value="1" required></div>
+            <div class="col-md-2"><label class="form-label">السعر</label><input type="number" step="0.01" name="unit_price" class="form-control" required></div>
+            <div class="col-md-2"><label class="form-label">المدفوع / المحصل</label><input type="number" step="0.01" name="paid_amount" class="form-control" value="0"></div>
+            <div class="col-12"><button class="btn {{ cfg.btn_color }} w-100 fw-bold">حفظ وترحيل الحركة</button></div>
+        </form>
+    </div>
+
+    <!-- سجل السجلات -->
+    <div class="card p-3 shadow-sm">
+        <h6>سجل المعاملات المباشرة</h6>
+        <table class="table table-hover align-middle">
+            <thead class="table-dark">
+                <tr><th>رقم المستند</th><th>الجهة</th><th>الإجمالي</th><th>المدفوع</th><th>التاريخ</th></tr>
+            </thead>
+            <tbody>
+                {% for d in docs %}
+                <tr>
+                    <td>#{{d.id}}</td><td>{{d.entity_name}}</td><td>{{d.total_amount}}</td><td>{{d.paid_amount}}</td><td>{{d.date}}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
